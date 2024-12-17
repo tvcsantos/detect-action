@@ -7,10 +7,37 @@ import { IHeaders } from 'typed-rest-client/Interfaces'
 import { DetectToolsVersions } from './detect-tools-versions'
 import { DetectToolVersion } from './detect-tool-version'
 
-const DETECT_BINARY_REPO_URL = 'https://sig-repo.synopsys.com'
+// new location since split with Synopsys
+const DETECT_BINARY_REPO_URL = 'https://repo.blackduck.com'
+
+// curate the correct URI for the version
+const DETECT_URI_BASE = '/bds-integrations-release/com/'
+const DETECT_LOCATION_SYNOPSYS = `${DETECT_URI_BASE}synopsys/integration/synopsys-detect`
+const DETECT_LOCATION_BLACKDUCK = `${DETECT_URI_BASE}blackduck/integration/detect`
+
 export const TOOL_NAME = 'detect'
 
 export class DetectToolDownloader implements ToolDownloader {
+  private AUTH_URI: string
+  private DOWNLOAD_URI: string
+  private TOOL_NAME_LOCAL: string
+
+  constructor() {
+    // assume properties for v9.x or earlier
+    this.AUTH_URI = `${DETECT_BINARY_REPO_URL}/api/storage/${DETECT_LOCATION_SYNOPSYS}`
+    this.DOWNLOAD_URI = `${DETECT_BINARY_REPO_URL}${DETECT_LOCATION_SYNOPSYS}`
+    this.TOOL_NAME_LOCAL = 'synopsys-detect-'
+  }
+
+  private setupUris(versionAsNum = 8): undefined {
+    if (versionAsNum >= 10) {
+      // new location to download versions >= 10
+      this.AUTH_URI = `${DETECT_BINARY_REPO_URL}/api/storage/${DETECT_LOCATION_BLACKDUCK}`
+      this.DOWNLOAD_URI = `${DETECT_BINARY_REPO_URL}${DETECT_LOCATION_BLACKDUCK}`
+      this.TOOL_NAME_LOCAL = 'detect-'
+    }
+  }
+
   private async getDetectVersions(): Promise<DetectToolsVersions> {
     const authenticationClient = new HttpClient(APPLICATION_NAME)
     const headers: IHeaders = {
@@ -18,7 +45,7 @@ export class DetectToolDownloader implements ToolDownloader {
     }
 
     const httpClientResponse = await authenticationClient.get(
-      `${DETECT_BINARY_REPO_URL}/api/storage/bds-integrations-release/com/synopsys/integration/synopsys-detect?properties`,
+      `${this.AUTH_URI}?properties`,
       headers
     )
     const responseBody = await httpClientResponse.readBody()
@@ -28,11 +55,20 @@ export class DetectToolDownloader implements ToolDownloader {
   private async findDetectVersion(
     version?: string
   ): Promise<DetectToolVersion> {
+    // default to 8.x
+    let majorVersionAsNum = 8
+    if (version?.match(/^[0-9]+/)) {
+      majorVersionAsNum = parseInt(version)
+    }
+
+    // URIs differ based on version used
+    this.setupUris(majorVersionAsNum)
+
     if (version?.match(/^[0-9]+.[0-9]+.[0-9]+$/)) {
       return {
-        url: `${DETECT_BINARY_REPO_URL}/bds-integrations-release/com/synopsys/integration/synopsys-detect/${version}/synopsys-detect-${version}.jar`,
+        url: `${this.DOWNLOAD_URI}/${version}/${this.TOOL_NAME_LOCAL}${version}.jar`,
         version,
-        jarName: `synopsys-detect-${version}.jar`
+        jarName: `${this.TOOL_NAME_LOCAL}${version}.jar`
       }
     }
 

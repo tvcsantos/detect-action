@@ -42998,24 +42998,53 @@ const toolCache = __importStar(__nccwpck_require__(7784));
 const path_1 = __importDefault(__nccwpck_require__(1017));
 const HttpClient_1 = __nccwpck_require__(5538);
 const constants_1 = __nccwpck_require__(2706);
-const DETECT_BINARY_REPO_URL = 'https://sig-repo.synopsys.com';
+// new location since split with Synopsys
+const DETECT_BINARY_REPO_URL = 'https://repo.blackduck.com';
+// curate the correct URI for the version
+const DETECT_URI_BASE = '/bds-integrations-release/com/';
+const DETECT_LOCATION_SYNOPSYS = `${DETECT_URI_BASE}synopsys/integration/synopsys-detect`;
+const DETECT_LOCATION_BLACKDUCK = `${DETECT_URI_BASE}blackduck/integration/detect`;
 exports.TOOL_NAME = 'detect';
 class DetectToolDownloader {
+    AUTH_URI;
+    DOWNLOAD_URI;
+    TOOL_NAME_LOCAL;
+    constructor() {
+        // assume properties for v9.x or earlier
+        this.AUTH_URI = `${DETECT_BINARY_REPO_URL}/api/storage/${DETECT_LOCATION_SYNOPSYS}`;
+        this.DOWNLOAD_URI = `${DETECT_BINARY_REPO_URL}${DETECT_LOCATION_SYNOPSYS}`;
+        this.TOOL_NAME_LOCAL = 'synopsys-detect-';
+    }
+    setupUris(versionAsNum = 8) {
+        if (versionAsNum >= 10) {
+            // new location to download versions >= 10
+            this.AUTH_URI = `${DETECT_BINARY_REPO_URL}/api/storage/${DETECT_LOCATION_BLACKDUCK}`;
+            this.DOWNLOAD_URI = `${DETECT_BINARY_REPO_URL}${DETECT_LOCATION_BLACKDUCK}`;
+            this.TOOL_NAME_LOCAL = 'detect-';
+        }
+    }
     async getDetectVersions() {
         const authenticationClient = new HttpClient_1.HttpClient(constants_1.APPLICATION_NAME);
         const headers = {
             'X-Result-Detail': 'info'
         };
-        const httpClientResponse = await authenticationClient.get(`${DETECT_BINARY_REPO_URL}/api/storage/bds-integrations-release/com/synopsys/integration/synopsys-detect?properties`, headers);
+        const httpClientResponse = await authenticationClient.get(`${this.AUTH_URI}?properties`, headers);
         const responseBody = await httpClientResponse.readBody();
         return JSON.parse(responseBody);
     }
     async findDetectVersion(version) {
+        // default to 8.x
+        let majorVersionAsNum = 8;
+        if (version?.match(/^[0-9]+/)) {
+            majorVersionAsNum = parseInt(version);
+        }
+        // URIs differ based on version used
+        this.setupUris(majorVersionAsNum);
         if (version?.match(/^[0-9]+.[0-9]+.[0-9]+$/)) {
             return {
-                url: `${DETECT_BINARY_REPO_URL}/bds-integrations-release/com/synopsys/integration/synopsys-detect/${version}/synopsys-detect-${version}.jar`,
+                url: `${this.DOWNLOAD_URI}/${version}/${this.TOOL_NAME_LOCAL}${version}.jar`,
                 version,
-                jarName: `synopsys-detect-${version}.jar`
+                jarName: `${this.TOOL_NAME_LOCAL}${version}.jar`
             };
         }
         let detectVersionKey = 'DETECT_LATEST_';
